@@ -8,10 +8,20 @@ let past=[],future=[],historyBytes=0,renderPending=false,worker=null,detail=null
 const detailComposite=document.createElement('canvas');
 const HISTORY_LIMIT=48*1024*1024;
 function status(message,error=false){$('status').classList.toggle('error',error);$('status').querySelector('span').textContent=message;}
+const saveDestination=createSaveDestination({browser:window,onChange:({supported,name})=>{
+  $('save-folder').textContent=name?`保存先：${name}`:'保存先：ブラウザの設定';
+  $('change-folder').title=supported?'保存先フォルダを選択・変更':'保存先の指定にはChrome・Edgeなどの対応ブラウザが必要です';
+}});
+$('change-folder').onclick=async()=>{
+  if(busy)return;$('change-folder').disabled=true;
+  try{const result=await saveDestination.choose();status(result.remembered?`保存先を「${result.name}」に変更しました。次回もこのフォルダを使います。`:`保存先を「${result.name}」に変更しました。現在のブラウザでは次回の保存先を記憶できません。`);}
+  catch(error){if(error.name!=='AbortError')status(error.message==='UNSUPPORTED'?'保存先の指定はWindowsのChrome・Edgeなどの対応ブラウザで利用できます。':'保存先を変更できませんでした。別のフォルダをお試しください。',true);}
+  finally{$('change-folder').disabled=false;}
+};
 function controls(){
   $('undo').disabled=busy||!past.length;$('redo').disabled=busy||!future.length;
   for(const id of ['reset','download','compare','auto-run','zoom'])$(id).disabled=!loaded||busy;
-  $('choose').disabled=$('empty-choose').disabled=busy;
+  $('choose').disabled=$('empty-choose').disabled=$('change-folder').disabled=busy;
   $('apply-selection').disabled=$('cancel-selection').disabled=!selection||busy||!!drag;
   document.querySelectorAll('.tool, input[name="quality"]').forEach(b=>b.disabled=busy);
   $('tolerance').disabled=$('islands').disabled=$('brush-size').disabled=busy;
@@ -212,12 +222,19 @@ $('apply-selection').onclick=()=>{
   mctx.save();mctx.globalCompositeOperation=tool==='rect'?'destination-in':'destination-out';mctx.drawImage(area,0,0);mctx.restore();
   clearSelection();render();status(tool==='rect'?'枠の外側を削除しました。':'囲んだ内側を削除しました。');
 };
-$('download').onclick=()=>{
-  if(!loaded||busy)return;const output=document.createElement('canvas');output.width=w;output.height=h;const c=output.getContext('2d');drawEdited(c);
-  $('download').disabled=true;
-  output.toBlob(blob=>{controls();if(!blob){status('保存できませんでした。もう一度お試しください。',true);return;}
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename.replace(/\.[^.]+$/,'').replace(/\[背景無し\]$/,'')+'[背景無し].png';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);status('透過PNGを保存しました。確認背景の色は含まれません。');
-  },'image/png');
+$('download').onclick=async()=>{
+  if(!loaded||busy)return;
+  const name=filename.replace(/\.[^.]+$/,'').replace(/\[背景無し\]$/,'')+'[背景無し].png';
+  setBusy(true);
+  try{
+    const destination=await saveDestination.prepare();
+    const output=document.createElement('canvas');output.width=w;output.height=h;drawEdited(output.getContext('2d'));
+    const blob=await new Promise((resolve,reject)=>output.toBlob(value=>value?resolve(value):reject(new Error('PNG_FAILED')),'image/png'));
+    const result=await saveDestination.save(blob,name,destination);
+    status(result.folder?`「${result.name}」を「${result.folder}」に保存しました。`:'透過PNGを保存しました。確認背景の色は含まれません。');
+  }catch(error){
+    if(error.name!=='AbortError')status(error.message==='PERMISSION_DENIED'?'保存先への書き込みが許可されていません。保存を再度押して許可するか、フッターから保存先を変更してください。':'保存できませんでした。フッターから保存先を変更するか、もう一度お試しください。',true);
+  }finally{setBusy(false);}
 };
 window.addEventListener('keydown',e=>{
   if(busy)return;const key=e.key.toLowerCase();
