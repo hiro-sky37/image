@@ -8,6 +8,21 @@ let past=[],future=[],historyBytes=0,renderPending=false,worker=null,detail=null
 const detailComposite=document.createElement('canvas');
 const HISTORY_LIMIT=48*1024*1024;
 function status(message,error=false){$('status').classList.toggle('error',error);$('status').querySelector('span').textContent=message;}
+let saveToastTimer;
+function closeSaveToast(){clearTimeout(saveToastTimer);$('save-toast').hidden=true;}
+function scheduleSaveToastClose(){clearTimeout(saveToastTimer);if(!$('save-toast').matches(':hover')&&!$('save-toast').contains(document.activeElement))saveToastTimer=setTimeout(closeSaveToast,5000);}
+function showSaveToast(result){
+  clearTimeout(saveToastTimer);
+  $('save-toast-title').textContent=result.folder?'保存しました':'ダウンロードを開始しました';
+  $('save-toast-name').textContent=result.name;
+  $('save-toast-folder').textContent=result.folder?`保存先：${result.folder}`:'ブラウザのダウンロードを確認してください';
+  $('save-toast').hidden=false;scheduleSaveToastClose();
+}
+$('save-toast-close').onclick=closeSaveToast;
+$('save-toast').addEventListener('pointerenter',()=>clearTimeout(saveToastTimer));
+$('save-toast').addEventListener('pointerleave',scheduleSaveToastClose);
+$('save-toast').addEventListener('focusin',()=>clearTimeout(saveToastTimer));
+$('save-toast').addEventListener('focusout',()=>setTimeout(scheduleSaveToastClose,0));
 const saveDestination=createSaveDestination({browser:window,onChange:({supported,name})=>{
   $('save-folder').textContent=name?`保存先：${name}`:'保存先：ブラウザの設定';
   $('change-folder').title=supported?'保存先フォルダを選択・変更':'保存先の指定にはChrome・Edgeなどの対応ブラウザが必要です';
@@ -231,6 +246,7 @@ $('download').onclick=async()=>{
     const output=document.createElement('canvas');output.width=w;output.height=h;drawEdited(output.getContext('2d'));
     const blob=await new Promise((resolve,reject)=>output.toBlob(value=>value?resolve(value):reject(new Error('PNG_FAILED')),'image/png'));
     const result=await saveDestination.save(blob,name,destination);
+    showSaveToast(result);
     status(result.folder?`「${result.name}」を「${result.folder}」に保存しました。`:'透過PNGを保存しました。確認背景の色は含まれません。');
   }catch(error){
     if(error.name!=='AbortError')status(error.message==='PERMISSION_DENIED'?'保存先への書き込みが許可されていません。保存を再度押して許可するか、フッターから保存先を変更してください。':'保存できませんでした。フッターから保存先を変更するか、もう一度お試しください。',true);
