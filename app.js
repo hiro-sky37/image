@@ -11,7 +11,7 @@ function controls(){
   $('undo').disabled=busy||!past.length;$('redo').disabled=busy||!future.length;
   for(const id of ['reset','download','compare','auto-run'])$(id).disabled=!loaded||busy;
   $('choose').disabled=$('empty-choose').disabled=busy;
-  $('apply-selection').disabled=$('cancel-selection').disabled=!selection||busy;
+  $('apply-selection').disabled=$('cancel-selection').disabled=!selection||busy||!!drag;
   document.querySelectorAll('.tool').forEach(b=>b.disabled=busy);
   $('tolerance').disabled=$('islands').disabled=$('brush-size').disabled=busy;
   $('canvas-wrap').classList.toggle('working',busy);overlay.style.pointerEvents=busy?'none':'auto';
@@ -28,15 +28,21 @@ function requestRender(){if(!renderPending){renderPending=true;requestAnimationF
 function fit(){if(!loaded)return;const stage=$('stage').getBoundingClientRect(),pad=window.innerWidth<700?24:48;const scale=Math.min((stage.width-pad)/w,(stage.height-pad)/h,1);$('canvas-wrap').style.width=`${Math.max(1,w*scale)}px`;$('canvas-wrap').style.height=`${Math.max(1,h*scale)}px`;$('scale-label').textContent=`${Math.round(scale*100)}%`;}
 new ResizeObserver(fit).observe($('stage'));
 function clearSelection(){selection=null;drag=null;octx.clearRect(0,0,w,h);controls();}
+function outlineShape(){return document.querySelector('input[name="outline-shape"]:checked').value;}
+function selectionHelp(){
+  $('outline-shape').hidden=tool!=='rect';
+  $('selection-help').textContent=tool==='rect'?(outlineShape()==='freehand'?'残したい部分を自由になぞって囲んでください。始点と終点を滑らかにつなぎ、外側だけを消します。':'ドラッグして残したい範囲を長方形で囲んでください。外側だけを消します。'):'消したい範囲をなぞって囲んでください。始点と終点を滑らかにつないで、内側を選択します。';
+}
+document.querySelectorAll('input[name="outline-shape"]').forEach(input=>input.onchange=()=>{clearSelection();selectionHelp();});
 function setTool(next){
   if(busy)return;tool=next;clearSelection();
   if(showOriginal)toggleCompare(false);
   document.querySelectorAll('.tool').forEach(b=>{const selected=b.dataset.tool===tool;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',selected);});
   $('auto-settings').hidden=tool!=='auto';$('selection-settings').hidden=!['rect','lasso'].includes(tool);$('brush-settings').hidden=!['brush','restore'].includes(tool);
-  $('selection-help').textContent=tool==='rect'?'画像の上をドラッグして、残したい範囲を囲んでください。枠の外側だけが消えます。':'消したい範囲をなぞって囲んでください。指を離すと線が閉じ、内側を選択します。';
+  selectionHelp();
   $('apply-selection').textContent=tool==='rect'?'枠の外側を削除':'囲んだ内側を削除';
   $('brush-help').textContent=tool==='restore'?'画像をなぞって、消した部分を元に戻します。':'画像をなぞって細部を消します。';
-  if(loaded)status({auto:'許容範囲を調整して「背景を透過する」を押してください。',rect:'ドラッグして、残したい範囲を囲んでください。',lasso:'消したい範囲をなぞって囲んでください。',brush:'なぞった部分を消します。',restore:'なぞった部分を元の画像に戻します。'}[tool]);
+  if(loaded)status({auto:'許容範囲を調整して「背景を透過する」を押してください。',rect:'残したい範囲を囲んでください。線の外側だけを削除できます。',lasso:'消したい範囲をなぞって囲んでください。',brush:'なぞった部分を消します。',restore:'なぞった部分を元の画像に戻します。'}[tool]);
 }
 async function loadFile(file){
   if(busy||!file)return;
@@ -101,14 +107,27 @@ async function autoRemove(){
 }
 $('auto-run').onclick=autoRemove;
 function point(e){const r=overlay.getBoundingClientRect();return{x:Math.max(0,Math.min(w,(e.clientX-r.left)*w/r.width)),y:Math.max(0,Math.min(h,(e.clientY-r.top)*h/r.height))};}
-function path(context,points){context.beginPath();context.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)context.lineTo(points[i].x,points[i].y);context.closePath();}
+function selectionPath(context,append=false){
+  if(selection.type==='rect'){
+    if(!append)context.beginPath();
+    context.rect(selection.x,selection.y,selection.width,selection.height);
+  }else if(selection.contour){traceContour(context,selection.contour,append);}
+  else{
+    if(!append)context.beginPath();
+    const points=selection.points;context.moveTo(points[0].x,points[0].y);
+    for(let i=1;i<points.length;i++)context.lineTo(points[i].x,points[i].y);
+    context.closePath();
+  }
+}
 function drawSelection(){
   octx.clearRect(0,0,w,h);if(!selection||showOriginal)return;
-  const ratio=w/Math.max(1,overlay.getBoundingClientRect().width);octx.lineWidth=1.5*ratio;octx.setLineDash([6*ratio,4*ratio]);octx.strokeStyle='#5c8234';octx.fillStyle='#5c823425';
-  if(selection.type==='rect'){
-    const{x,y,width,height}=selection;octx.beginPath();octx.rect(0,0,w,h);octx.rect(x,y,width,height);octx.fillStyle='#242c293d';octx.fill('evenodd');octx.strokeRect(x,y,width,height);
-  }else{path(octx,selection.points);octx.fill();octx.stroke();}
-  octx.setLineDash([]);
+  const ratio=w/Math.max(1,overlay.getBoundingClientRect().width);
+  octx.lineWidth=1.5*ratio;octx.setLineDash([6*ratio,4*ratio]);octx.strokeStyle='#5c8234';
+  if(tool==='rect'){
+    octx.beginPath();octx.rect(0,0,w,h);selectionPath(octx,true);
+    octx.fillStyle='#242c293d';octx.fill('evenodd');
+  }else{selectionPath(octx);octx.fillStyle='#5c823425';octx.fill('evenodd');}
+  selectionPath(octx);octx.stroke();octx.setLineDash([]);
 }
 function stroke(a,b){
   mctx.save();mctx.globalCompositeOperation=tool==='restore'?'source-over':'destination-out';mctx.strokeStyle=mctx.fillStyle='#fff';
@@ -119,28 +138,37 @@ overlay.addEventListener('pointerdown',e=>{
   if(!loaded||busy||tool==='auto'||e.button!==0)return;e.preventDefault();if(showOriginal)toggleCompare(false);
   overlay.setPointerCapture(e.pointerId);const p=point(e);drag={start:p,last:p,id:e.pointerId};
   if(['brush','restore'].includes(tool)){snapshot();stroke(p,p);}
-  else{selection=tool==='rect'?{type:'rect',x:p.x,y:p.y,width:0,height:0}:{type:'lasso',points:[p]};drawSelection();controls();}
+  else{selection=tool==='rect'&&outlineShape()==='rectangle'?{type:'rect',x:p.x,y:p.y,width:0,height:0}:{type:'freehand',points:[p],contour:null};drawSelection();controls();}
 });
 overlay.addEventListener('pointermove',e=>{
   if(busy||!loaded)return;const p=point(e);
   if(drag){if(drag.id!==e.pointerId)return;
     if(['brush','restore'].includes(tool))stroke(drag.last,p);
-    else if(tool==='rect'){selection={type:'rect',x:Math.min(drag.start.x,p.x),y:Math.min(drag.start.y,p.y),width:Math.abs(p.x-drag.start.x),height:Math.abs(p.y-drag.start.y)};drawSelection();}
-    else{if(Math.hypot(p.x-drag.last.x,p.y-drag.last.y)>1){selection.points.push(p);drawSelection();}}
+    else if(selection.type==='rect'){selection={type:'rect',x:Math.min(drag.start.x,p.x),y:Math.min(drag.start.y,p.y),width:Math.abs(p.x-drag.start.x),height:Math.abs(p.y-drag.start.y)};drawSelection();}
+    else{const ratio=w/overlay.getBoundingClientRect().width;const events=e.getCoalescedEvents?.()||[];for(const event of events.length?events:[e]){const q=point(event),last=selection.points.at(-1);if(Math.hypot(q.x-last.x,q.y-last.y)>=ratio*1.5)selection.points.push(q);}drawSelection();}
     drag.last=p;
   }else if(['brush','restore'].includes(tool)&&!showOriginal){octx.clearRect(0,0,w,h);octx.beginPath();octx.arc(p.x,p.y,Number($('brush-size').value)*w/overlay.getBoundingClientRect().width/2,0,Math.PI*2);octx.strokeStyle='#fff';octx.lineWidth=2*w/overlay.getBoundingClientRect().width;octx.stroke();octx.strokeStyle='#283727';octx.lineWidth=.8*w/overlay.getBoundingClientRect().width;octx.stroke();}
 });
-function finishPointer(e){if(!drag||drag.id!==e.pointerId)return;drag=null;
-  if(selection && ((selection.type==='rect'&&(selection.width<2||selection.height<2))||(selection.type==='lasso'&&selection.points.length<3)))clearSelection();
-  else{drawSelection();controls();if(selection)status('選択範囲を確認して、削除ボタンを押してください。');else status(tool==='restore'?'なぞった部分を復元しました。':'なぞった部分を消しました。');}
+function finishPointer(e){
+  if(!drag||drag.id!==e.pointerId)return;
+  if(selection?.type==='freehand'){
+    if(e.type==='pointerup'){const p=point(e),last=selection.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)>1)selection.points.push(p);}
+    selection.contour=smoothContour(selection.points,2*w/overlay.getBoundingClientRect().width);
+  }
+  drag=null;
+  if(selection&&((selection.type==='rect'&&(selection.width<2||selection.height<2))||(selection.type==='freehand'&&!selection.contour))){clearSelection();status('範囲を囲むように、もう少し長くなぞってください。');}
+  else{drawSelection();controls();if(selection)status('始点と終点を滑らかにつなぎました。範囲を確認して削除してください。');else status(tool==='restore'?'なぞった部分を復元しました。':'なぞった部分を消しました。');}
 }
-overlay.addEventListener('pointerup',finishPointer);overlay.addEventListener('pointercancel',finishPointer);overlay.addEventListener('lostpointercapture',finishPointer);
+overlay.addEventListener('pointerup',finishPointer);
+overlay.addEventListener('pointercancel',e=>{if(drag?.id===e.pointerId){clearSelection();render();}});
+overlay.addEventListener('lostpointercapture',finishPointer);
 overlay.addEventListener('pointerleave',()=>{if(!drag)drawSelection();});
 $('cancel-selection').onclick=()=>{clearSelection();status('選択を解除しました。');};
 $('apply-selection').onclick=()=>{
   if(!selection||busy)return;snapshot();
-  if(selection.type==='rect'){const{x,y,width,height}=selection;mctx.clearRect(0,0,w,y);mctx.clearRect(0,y+height,w,h-y-height);mctx.clearRect(0,y,x,height);mctx.clearRect(x+width,y,w-x-width,height);}
-  else{mctx.save();mctx.globalCompositeOperation='destination-out';mctx.fillStyle='#fff';path(mctx,selection.points);mctx.fill();mctx.restore();}
+  const area=document.createElement('canvas');area.width=w;area.height=h;
+  const areaCtx=area.getContext('2d');areaCtx.fillStyle='#fff';selectionPath(areaCtx);areaCtx.fill('evenodd');
+  mctx.save();mctx.globalCompositeOperation=tool==='rect'?'destination-in':'destination-out';mctx.drawImage(area,0,0);mctx.restore();
   clearSelection();render();status(tool==='rect'?'枠の外側を削除しました。':'囲んだ内側を削除しました。');
 };
 $('download').onclick=()=>{

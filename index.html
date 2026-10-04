@@ -4,19 +4,19 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KIRI — 画像の背景を透過</title><meta name="description" content="ブラウザ内で画像の背景を透過。自動処理、枠で切り抜き、なぞって削除、透過PNGの保存。">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23202725'/%3E%3Cpath d='M9 8v16M23 8L12 16l11 8' stroke='%23dcf88b' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css"><script src="processing.js" defer></script><script src="app.js" defer></script>
+<link rel="stylesheet" href="style.css?v=2"><script src="processing.js" defer></script><script src="selection.js?v=2" defer></script><script src="app.js?v=2" defer></script>
 </head>
 <body>
 <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></symbol><symbol id="icon-spark" viewBox="0 0 24 24"><path d="m14 4 1.8 5.2L21 11l-5.2 1.8L14 18l-1.8-5.2L7 11l5.2-1.8L14 4ZM5 3v4M3 5h4M5 17v4M3 19h4"/></symbol><symbol id="icon-rect" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1" stroke-dasharray="4 3"/></symbol><symbol id="icon-lasso" viewBox="0 0 24 24"><path d="M8 17c-4-1-6-3-5-7s5-6 10-5 9 4 8 8-6 5-11 4M10 17c3 3 0 5-2 4s-1-4 2-4Z"/></symbol><symbol id="icon-brush" viewBox="0 0 24 24"><path d="m9 14 9-11 3 3-11 9M9 14c-4-2-4 6-7 6 6 2 10-2 8-5Z"/></symbol><symbol id="icon-restore" viewBox="0 0 24 24"><path d="M4 9a8 8 0 1 1 0 7M4 3v6h6M12 9v6M9 12h6"/></symbol><symbol id="icon-undo" viewBox="0 0 24 24"><path d="m8 4-5 5 5 5M3 9h10a7 7 0 0 1 7 7v3"/></symbol><symbol id="icon-redo" viewBox="0 0 24 24"><path d="m16 4 5 5-5 5m5-5H11a7 7 0 0 0-7 7v3"/></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol><symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol></svg>
 <header class="header"><a class="brand" href="./" aria-label="KIRI ホーム"><span class="brand-icon">k</span>KIRI<span class="brand-sub">背景透過ツール</span></a><span class="local-note"><span class="small-lock">▣</span>画像はこのブラウザ内で処理</span></header>
 <main>
-<div class="page-heading"><div><span class="eyebrow">LESS BACKGROUND. MORE YOU.</span><h1>残したいものだけ、きれいに。</h1></div><button id="choose" class="button secondary"><svg><use href="#icon-upload"/></svg>画像を選ぶ</button></div>
+<div class="page-heading"><div><span class="eyebrow">LESS BACKGROUND. MORE YOU.</span></div><button id="choose" class="button secondary"><svg><use href="#icon-upload"/></svg>画像を選ぶ</button></div>
 <input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif,image/bmp" hidden>
 <div class="editor">
 <aside class="sidebar"><div class="sidebar-title"><span>編集ツール</span><span class="step-number">01</span></div>
 <div class="tools" role="group" aria-label="編集方法">
 <button class="tool active" data-tool="auto" aria-pressed="true"><svg><use href="#icon-spark"/></svg><span><strong>自動で透過</strong><small>背景色を見つけて削除</small></span><span class="tool-key">A</span></button>
-<button class="tool" data-tool="rect" aria-pressed="false"><svg><use href="#icon-rect"/></svg><span><strong>枠の外側を削除</strong><small>残したい範囲を囲む</small></span><span class="tool-key">R</span></button>
+<button class="tool" data-tool="rect" aria-pressed="false"><svg><use href="#icon-rect"/></svg><span><strong>枠の外側を削除</strong><small>フリーハンドで囲む</small></span><span class="tool-key">R</span></button>
 <button class="tool" data-tool="lasso" aria-pressed="false"><svg><use href="#icon-lasso"/></svg><span><strong>なぞって削除</strong><small>囲んだ内側を消す</small></span><span class="tool-key">L</span></button>
 <div class="tool-divider"></div>
 <button class="tool compact" data-tool="brush" aria-pressed="false"><svg><use href="#icon-brush"/></svg><span><strong>消しゴム</strong></span><span class="tool-key">E</span></button>
@@ -26,7 +26,7 @@
 <label class="switch-row"><span><strong>離れた領域を除去</strong><small>最大のつながった領域だけ残す</small></span><input id="islands" type="checkbox" checked><span class="switch" aria-hidden="true"></span></label>
 <p class="setting-help">単色背景に最適です。複雑な背景は手動で調整できます。</p>
 <button id="auto-run" class="button primary full" disabled><svg><use href="#icon-spark"/></svg>背景を透過する</button></div>
-<div class="settings" id="selection-settings" hidden><p id="selection-help" class="setting-help"></p><button id="apply-selection" class="button primary full" disabled>選択範囲を適用</button><button id="cancel-selection" class="text-button full" disabled>選択を解除</button></div>
+<div class="settings" id="selection-settings" hidden><fieldset id="outline-shape" class="shape-choice"><legend>囲み方</legend><label><input type="radio" name="outline-shape" value="freehand" checked>フリーハンド</label><label><input type="radio" name="outline-shape" value="rectangle">長方形</label></fieldset><p id="selection-help" class="setting-help"></p><button id="apply-selection" class="button primary full" disabled>選択範囲を適用</button><button id="cancel-selection" class="text-button full" disabled>選択を解除</button></div>
 <div class="settings" id="brush-settings" hidden><div class="setting-label"><label for="brush-size">ブラシの大きさ</label><output id="brush-value">40 px</output></div><input id="brush-size" type="range" min="2" max="180" value="40"><p class="setting-help" id="brush-help">画像をなぞって細部を消します。</p></div>
 <div class="sidebar-bottom"><svg><use href="#icon-undo"/></svg><span>消しすぎても、いつでも戻せます。</span></div></aside>
 <section class="workspace" aria-label="画像編集エリア">
